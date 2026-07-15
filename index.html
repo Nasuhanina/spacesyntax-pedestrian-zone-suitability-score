@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Space Syntax Visualizer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; height: 100vh; }
+  #sidebar { width: 360px; min-width: 360px; background: #1a1a2e; color: #e0e0e0; display: flex; flex-direction: column; overflow-y: auto; z-index: 1000; }
+  #sidebar h1 { font-size: 1.2rem; padding: 20px 20px 10px; color: #fff; letter-spacing: 0.5px; }
+  #sidebar .subtitle { font-size: 0.8rem; padding: 0 20px 16px; color: #8899aa; border-bottom: 1px solid #2a2a4a; }
+  #controls { padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid #2a2a4a; }
+  .metric-btn { padding: 10px 16px; border: 2px solid transparent; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 600; text-align: left; transition: all 0.2s; background: #16213e; color: #8899aa; }
+  .metric-btn:hover { background: #1a2744; color: #ccc; }
+  .metric-btn.active { border-color: #e94560; background: #1a2744; color: #fff; }
+  .metric-btn .badge { float: right; font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; background: #2a2a4a; color: #8899aa; }
+  .metric-btn.active .badge { background: #e94560; color: #fff; }
+  #info-panel { padding: 16px 20px; flex: 1; }
+  #info-panel h3 { font-size: 0.95rem; color: #e94560; margin-bottom: 8px; }
+  #info-panel p { font-size: 0.82rem; line-height: 1.6; color: #a0b0c0; margin-bottom: 12px; }
+  #info-panel .stat { display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.8rem; border-bottom: 1px solid #2a2a4a; }
+  #info-panel .stat .label { color: #8899aa; }
+  #info-panel .stat .value { color: #e0e0e0; font-weight: 600; }
+  #legend { margin-top: 16px; }
+  #legend .gradient { height: 16px; border-radius: 4px; margin: 6px 0; }
+  #legend .labels { display: flex; justify-content: space-between; font-size: 0.7rem; color: #8899aa; }
+  #map { flex: 1; }
+  #loading { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9999; color: #fff; font-size: 1.2rem; }
+  .leaflet-container { background: #0f0f23; }
+  @media (max-width: 768px) {
+    body { flex-direction: column; }
+    #sidebar { width: 100%; min-width: unset; max-height: 45vh; }
+    #map { height: 55vh; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">Loading space syntax data...</div>
+
+<div id="sidebar">
+  <h1>Space Syntax Visualizer</h1>
+  <div class="subtitle">Shah Alam, Selangor &mdash; Segment Map Analysis</div>
+  <div id="controls">
+    <button class="metric-btn active" data-metric="integration">
+      Integration (HH) <span class="badge">T1024</span>
+    </button>
+    <button class="metric-btn" data-metric="choice">
+      Choice (Norm.) <span class="badge">T1024</span>
+    </button>
+    <button class="metric-btn" data-metric="connectivity">
+      Connectivity <span class="badge">Valence</span>
+    </button>
+  </div>
+  <div id="info-panel">
+    <div id="explanation"></div>
+    <div id="legend"></div>
+    <div id="stats"></div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const METRICS = {
+  integration: {
+    label: "Integration (HH)",
+    key: "T1024_Integration",
+    short: "Integration",
+    description: "Integration measures how many turns it takes to reach every other street segment from a given segment. High integration (red) means the street is topologically central &mdash; easily accessible with few turns. Low integration (blue) means the street is more isolated. Integration is correlated with pedestrian movement, land value, and urban vitality.",
+    colors: ["#313695", "#4575b4", "#74add1", "#abd9e9", "#fee090", "#fdae61", "#f46d43", "#d73027", "#a50026"],
+    stops: 9,
+    unit: ""
+  },
+  choice: {
+    label: "Choice (Norm.)",
+    key: "T1024_Choice",
+    short: "Choice",
+    description: "Choice measures how likely a street segment is to be used as a through-route in the shortest paths between all pairs of segments. High choice (red) means the segment lies on many shortest paths &mdash; it is a likely route for through-movement. Low choice (blue) means it is rarely on the shortest path between other segments.",
+    colors: ["#313695", "#4575b4", "#74add1", "#abd9e9", "#fee090", "#fdae61", "#f46d43", "#d73027", "#a50026"],
+    stops: 9,
+    unit: ""
+  },
+  connectivity: {
+    label: "Connectivity",
+    key: "Connectivity",
+    short: "Connectivity",
+    description: "Connectivity is the simplest measure: the number of immediate neighbors (intersections/junctions) directly connected to a street segment. Higher values mean a street has more direct connections. It is a local measure, unlike Integration and Choice which are global. Connectivity influences wayfinding and local accessibility.",
+    colors: ["#313695", "#4575b4", "#74add1", "#abd9e9", "#fee090", "#fdae61", "#f46d43", "#d73027", "#a50026"],
+    stops: 9,
+    unit: ""
+  }
+};
+
+const map = L.map('map', {
+  center: [3.065, 101.51],
+  zoom: 14,
+  zoomControl: true
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 19
+}).addTo(map);
+
+let geoData = {};
+let currentLayer = null;
+let currentMetric = 'integration';
+
+function getColor(value, min, max, colors) {
+  if (max === min) return colors[Math.floor(colors.length / 2)];
+  const idx = Math.min(Math.floor((value - min) / (max - min) * (colors.length - 1)), colors.length - 1);
+  return colors[Math.max(0, idx)];
+}
+
+function styleFeature(feature, metric) {
+  const m = METRICS[metric];
+  const val = feature.properties[m.key];
+  if (val == null) return { color: '#333', weight: 1, opacity: 0.3 };
+  const color = getColor(val, ranges[metric].min, ranges[metric].max, m.colors);
+  return { color, weight: 1.5, opacity: 0.85 };
+}
+
+function computeRanges(data, metric) {
+  const key = METRICS[metric].key;
+  let min = Infinity, max = -Infinity;
+  for (const feat of data.features) {
+    const v = feat.properties[key];
+    if (v != null && v < min) min = v;
+    if (v != null && v > max) max = v;
+  }
+  return { min, max };
+}
+
+let ranges = {};
+
+function renderMetric(metric) {
+  if (currentLayer) map.removeLayer(currentLayer);
+  currentMetric = metric;
+  const data = geoData[metric];
+  if (!data) return;
+
+  currentLayer = L.geoJSON(data, {
+    style: f => styleFeature(f, metric)
+  }).addTo(map);
+
+  updateInfo(metric);
+}
+
+function updateInfo(metric) {
+  const m = METRICS[metric];
+  const r = ranges[metric];
+  const data = geoData[metric];
+  const features = data.features;
+
+  document.getElementById('explanation').innerHTML = `
+    <h3>${m.label}</h3>
+    <p>${m.description}</p>
+  `;
+
+  const vals = features.map(f => f.properties[m.key]).filter(v => v != null);
+  vals.sort((a, b) => a - b);
+  const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+  const median = vals.length % 2 === 0
+    ? (vals[vals.length/2 - 1] + vals[vals.length/2]) / 2
+    : vals[Math.floor(vals.length/2)];
+  const p95 = vals[Math.floor(vals.length * 0.95)];
+
+  const fmt = v => typeof v === 'number' ? (v >= 1000 ? v.toLocaleString(undefined, {maximumFractionDigits:1}) : v.toFixed(4)) : v;
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><span class="label">Min</span><span class="value">${fmt(r.min)}</span></div>
+    <div class="stat"><span class="label">Max</span><span class="value">${fmt(r.max)}</span></div>
+    <div class="stat"><span class="label">Mean</span><span class="value">${fmt(mean)}</span></div>
+    <div class="stat"><span class="label">Median</span><span class="value">${fmt(median)}</span></div>
+    <div class="stat"><span class="label">95th %ile</span><span class="value">${fmt(p95)}</span></div>
+    <div class="stat"><span class="label">Segments</span><span class="value">${features.length.toLocaleString()}</span></div>
+  `;
+
+  const gradDiv = document.getElementById('legend');
+  const steps = m.stops;
+  const gradStops = [];
+  for (let i = 0; i < steps; i++) {
+    const t = i / (steps - 1);
+    const val = r.min + t * (r.max - r.min);
+    const color = getColor(val, r.min, r.max, m.colors);
+    gradStops.push(`${color} ${(t*100).toFixed(0)}%`);
+  }
+  gradDiv.innerHTML = `
+    <div class="gradient" style="background: linear-gradient(to right, ${gradStops.join(',')})"></div>
+    <div class="labels">
+      <span>Low ${m.short}</span>
+      <span>High ${m.short}</span>
+    </div>
+  `;
+}
+
+async function loadData() {
+  try {
+    const [integration, choice, connectivity] = await Promise.all([
+      fetch('spacesyntax/integration-800-wgs84.geojson').then(r => r.json()),
+      fetch('spacesyntax/choice-800-wgs84.geojson').then(r => r.json()),
+      fetch('spacesyntax/connectivity-wgs84.geojson').then(r => r.json())
+    ]);
+
+    geoData = { integration, choice, connectivity };
+    ranges = {
+      integration: computeRanges(integration, 'integration'),
+      choice: computeRanges(choice, 'choice'),
+      connectivity: computeRanges(connectivity, 'connectivity')
+    };
+
+    document.getElementById('loading').style.display = 'none';
+
+    renderMetric('integration');
+
+    const bounds = L.geoJSON(integration).getBounds();
+    map.fitBounds(bounds, { padding: [20, 20] });
+
+  } catch (err) {
+    document.getElementById('loading').innerHTML = 'Error loading data. Make sure the GeoJSON files are accessible.';
+    console.error(err);
+  }
+}
+
+document.querySelectorAll('.metric-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.metric-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderMetric(btn.dataset.metric);
+  });
+});
+
+loadData();
+</script>
+</body>
+</html>
