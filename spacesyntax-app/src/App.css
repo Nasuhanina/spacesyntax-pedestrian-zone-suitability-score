@@ -349,6 +349,162 @@ html, body, #root {
   text-align: center;
 }
 
+/* ---- Route Sidebar ---- */
+.route-sidebar {
+  width: 360px;
+  min-width: 360px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: -2px 0 12px rgba(0,0,0,0.08);
+  padding: 20px;
+}
+
+.route-sidebar h2 {
+  font-size: 1rem;
+  color: #222;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.route-sidebar .route-btn {
+  width: 100%;
+  text-align: center;
+  margin-top: 0;
+}
+
+.route-hint {
+  font-size: 0.82rem;
+  color: #888;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+.route-result {
+  margin-top: 12px;
+  animation: fadeIn 0.3s ease;
+}
+
+.route-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.route-summary-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.route-dist {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.route-duration {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.route-via {
+  font-size: 0.78rem;
+  color: #999;
+  margin: 4px 0 12px;
+}
+
+.route-sidebar .route-steps {
+  max-height: 350px;
+}
+
+/* ---- Route Button ---- */
+.route-btn {
+  padding: 10px 16px;
+  border: 2px solid #3498db;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  background: #ebf5fb;
+  color: #2980b9;
+}
+
+.route-btn:hover {
+  background: #d4e6f1;
+}
+
+.route-btn.active {
+  background: #3498db;
+  color: #fff;
+  border-color: #2980b9;
+}
+
+/* ---- Route Steps ---- */
+.route-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.route-step {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #eee;
+}
+
+.route-step-num {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  background: #3498db;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.route-step-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.route-step-instruction {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #333;
+}
+
+.route-step-instruction b {
+  font-weight: 700;
+  color: #222;
+}
+
+.route-step-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: #999;
+  margin-top: 2px;
+}
+
+.route-step-dot {
+  color: #ccc;
+}
+
 /* ---- Loading ---- */
 .loading {
   display: flex;

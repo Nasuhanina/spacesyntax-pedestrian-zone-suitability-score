@@ -41,6 +41,38 @@ FIELD_MAP = {
     "choiceRn": "T1024_Choice",
 }
 
+def decode_polyline(encoded):
+    points = []
+    index = 0
+    lat = 0
+    lng = 0
+    while index < len(encoded):
+        shift = 0
+        result = 0
+        while True:
+            b = ord(encoded[index]) - 63
+            result |= (b & 0x1f) << shift
+            shift += 5
+            index += 1
+            if b < 0x20:
+                break
+        dlat = ~(result >> 1) if (result & 1) else (result >> 1)
+        lat += dlat
+        shift = 0
+        result = 0
+        while True:
+            b = ord(encoded[index]) - 63
+            result |= (b & 0x1f) << shift
+            shift += 5
+            index += 1
+            if b < 0x20:
+                break
+        dlng = ~(result >> 1) if (result & 1) else (result >> 1)
+        lng += dlng
+        points.append([lat / 1e5, lng / 1e5])
+    return points
+
+
 def haversine_km(lon1, lat1, lon2, lat2):
     R = 6371
     dlat = math.radians(lat2 - lat1)
@@ -181,6 +213,63 @@ def get_places():
         return jsonify({"status": final_status, "results": all_results})
     except requests.RequestException as e:
         return jsonify({"error": f"Places API error: {str(e)}"}), 502
+
+@app.route("/api/directions")
+def get_directions():
+    origin_lat = request.args.get("origin_lat", type=float)
+    origin_lng = request.args.get("origin_lng", type=float)
+    dest_lat = request.args.get("dest_lat", type=float)
+    dest_lng = request.args.get("dest_lng", type=float)
+    if None in (origin_lat, origin_lng, dest_lat, dest_lng):
+        return jsonify({"error": "origin_lat, origin_lng, dest_lat, dest_lng required"}), 400
+    if not GOOGLE_API_KEY:
+        return jsonify({"error": "Server misconfigured: GOOGLE_PLACES_API_KEY not set"}), 500
+
+    url = "https://maps.googleapis.com/maps/api/directions/json"
+    params = {
+        "origin": f"{origin_lat},{origin_lng}",
+        "destination": f"{dest_lat},{dest_lng}",
+        "mode": "walking",
+        "key": GOOGLE_API_KEY,
+    }
+
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        if data.get("status") != "OK":
+            return jsonify({"error": f"Directions API error: {data.get('status', 'UNKNOWN')}"}), 502
+
+        routes = []
+        for route in data.get("routes", []):
+            legs = []
+            for leg in route.get("legs", []):
+                steps = []
+                for step in leg.get("steps", []):
+                    steps.append({
+                        "instruction": step.get("html_instructions", ""),
+                        "distance": step.get("distance", {}),
+                        "duration": step.get("duration", {}),
+                    })
+                legs.append({
+                    "distance": leg.get("distance", {}),
+                    "duration": leg.get("duration", {}),
+                    "start_address": leg.get("start_address", ""),
+                    "end_address": leg.get("end_address", ""),
+                    "steps": steps,
+                })
+            overview = route.get("overview_polyline", {}).get("points", "")
+            routes.append({
+                "summary": route.get("summary", ""),
+                "overview_path": decode_polyline(overview),
+                "legs": legs,
+            })
+
+        return jsonify({"routes": routes})
+    except requests.RequestException as e:
+        return jsonify({"error": f"Directions API error: {str(e)}"}), 502
+
 
 @app.route("/api/analyze")
 def analyze():

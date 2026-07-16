@@ -168,7 +168,11 @@ function AnalysisPanel({ result, analysisLoading, onClear, places, placesLoading
   );
 }
 
-export default function Sidebar({ metrics, currentMetric, onChange, geoData, ranges, analysisResult, analysisLoading, onClearAnalysis, places, placesLoading, placesError }) {
+export default function Sidebar({
+  metrics, currentMetric, onChange, geoData, ranges,
+  analysisResult, analysisLoading, onClearAnalysis,
+  places, placesLoading, placesError,
+}) {
   return (
     <aside className="sidebar">
       <h1>Space Syntax Visualizer</h1>

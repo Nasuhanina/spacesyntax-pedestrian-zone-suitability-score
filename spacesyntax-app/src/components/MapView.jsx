@@ -24,7 +24,7 @@ function getPoiInfo(types) {
   return { color: '#7f8c8d', category: 'Other' };
 }
 
-export default function MapView({ geoData, metric, range, onAnalysisResult, onAnalysisLoading, places }) {
+export default function MapView({ geoData, metric, range, onAnalysisResult, onAnalysisLoading, places, routeMode, onRouteResult, onRouteLoading, routeData }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const layerRef = useRef(null);
@@ -34,8 +34,35 @@ export default function MapView({ geoData, metric, range, onAnalysisResult, onAn
   const onResultRef = useRef(onAnalysisResult);
   const onLoadingRef = useRef(onAnalysisLoading);
 
+  const routeModeRef = useRef(routeMode);
+  const onRouteResultRef = useRef(onRouteResult);
+  const onRouteLoadingRef = useRef(onRouteLoading);
+  const routeClickCountRef = useRef(0);
+  const originMarkerRef = useRef(null);
+  const destMarkerRef = useRef(null);
+  const routeLineRef = useRef(null);
+
   onResultRef.current = onAnalysisResult;
   onLoadingRef.current = onAnalysisLoading;
+  onRouteResultRef.current = onRouteResult;
+  onRouteLoadingRef.current = onRouteLoading;
+  routeModeRef.current = routeMode;
+
+  function clearRouteLayers(map) {
+    if (originMarkerRef.current) {
+      map.removeLayer(originMarkerRef.current);
+      originMarkerRef.current = null;
+    }
+    if (destMarkerRef.current) {
+      map.removeLayer(destMarkerRef.current);
+      destMarkerRef.current = null;
+    }
+    if (routeLineRef.current) {
+      map.removeLayer(routeLineRef.current);
+      routeLineRef.current = null;
+    }
+    routeClickCountRef.current = 0;
+  }
 
   useEffect(() => {
     if (mapInstanceRef.current) return;
@@ -53,6 +80,64 @@ export default function MapView({ geoData, metric, range, onAnalysisResult, onAn
     }).addTo(map);
 
     map.on('click', async (e) => {
+      if (routeModeRef.current) {
+        const count = routeClickCountRef.current;
+
+        if (count === 2) {
+          clearRouteLayers(map);
+        }
+
+        if (routeClickCountRef.current === 0) {
+          const marker = L.circleMarker(e.latlng, {
+            radius: 10,
+            color: '#fff',
+            weight: 2,
+            fillColor: '#3498db',
+            fillOpacity: 0.9,
+          });
+          marker.bindTooltip('Origin', { permanent: true, direction: 'top', offset: [0, -10] });
+          marker.addTo(map);
+          originMarkerRef.current = marker;
+          routeClickCountRef.current = 1;
+          return;
+        }
+
+        if (routeClickCountRef.current === 1) {
+          const marker = L.circleMarker(e.latlng, {
+            radius: 10,
+            color: '#fff',
+            weight: 2,
+            fillColor: '#e74c3c',
+            fillOpacity: 0.9,
+          });
+          marker.bindTooltip('Destination', { permanent: true, direction: 'top', offset: [0, -10] });
+          marker.addTo(map);
+          destMarkerRef.current = marker;
+          routeClickCountRef.current = 2;
+
+          const origin = originMarkerRef.current.getLatLng();
+          const dest = e.latlng;
+
+          const loadingRef = onRouteLoadingRef.current;
+          const resultRef = onRouteResultRef.current;
+          try {
+            if (loadingRef) loadingRef(true);
+            const res = await fetch(
+              `http://localhost:5000/api/directions?origin_lat=${origin.lat}&origin_lng=${origin.lng}&dest_lat=${dest.lat}&dest_lng=${dest.lng}`
+            );
+            const data = await res.json();
+            if (resultRef) resultRef(data);
+          } catch (err) {
+            console.error('[Route] Error:', err);
+            if (resultRef) resultRef({ error: err.message || 'Route fetch failed' });
+          } finally {
+            if (loadingRef) loadingRef(false);
+          }
+          return;
+        }
+        return;
+      }
+
       const loadingRef = onLoadingRef.current;
       const resultRef = onResultRef.current;
       try {
@@ -187,6 +272,41 @@ export default function MapView({ geoData, metric, range, onAnalysisResult, onAn
     group.addTo(map);
     poiLayerRef.current = group;
   }, [places]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    if (routeLineRef.current) {
+      map.removeLayer(routeLineRef.current);
+      routeLineRef.current = null;
+    }
+
+    if (!routeData || !routeData.routes || routeData.routes.length === 0) return;
+
+    const path = routeData.routes[0].overview_path;
+    if (!path || path.length === 0) return;
+
+    const latlngs = path.map((p) => [p[0], p[1]]);
+    const line = L.polyline(latlngs, {
+      color: '#3498db',
+      weight: 5,
+      opacity: 0.8,
+    });
+    line.addTo(map);
+    routeLineRef.current = line;
+
+    map.fitBounds(line.getBounds(), { padding: [40, 40] });
+  }, [routeData]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    if (!routeMode) {
+      clearRouteLayers(map);
+    }
+  }, [routeMode]);
 
   return <div ref={mapRef} className="map" />;
 }

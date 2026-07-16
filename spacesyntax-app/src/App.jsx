@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import MapView from './components/MapView';
 import Sidebar from './components/Sidebar';
+import RouteSidebar from './components/RouteSidebar';
 import { METRICS } from './data/metrics';
 import { fetchPlaces } from './data/places';
 import './App.css';
@@ -28,6 +29,10 @@ export default function App() {
   const [places, setPlaces] = useState(null);
   const [placesLoading, setPlacesLoading] = useState(false);
   const [placesError, setPlacesError] = useState(null);
+
+  const [routeMode, setRouteMode] = useState(false);
+  const [routeData, setRouteData] = useState(null);
+  const [routeLoading, setRouteLoading] = useState(false);
 
   useEffect(() => {
     async function loadAll() {
@@ -96,6 +101,28 @@ export default function App() {
     setPlacesError(null);
   }, []);
 
+  const handleToggleRouteMode = useCallback(() => {
+    setRouteMode((prev) => {
+      if (prev) {
+        setRouteData(null);
+      }
+      return !prev;
+    });
+  }, []);
+
+  const handleRouteResult = useCallback((data) => {
+    setRouteData(data);
+  }, []);
+
+  const handleRouteLoading = useCallback((loading) => {
+    setRouteLoading(loading);
+  }, []);
+
+  const handleClearRoute = useCallback(() => {
+    setRouteData(null);
+    setRouteMode(false);
+  }, []);
+
   if (loading) {
     return (
       <div className="loading">
@@ -127,6 +154,17 @@ export default function App() {
         onAnalysisResult={handleAnalysisResult}
         onAnalysisLoading={handleAnalysisLoading}
         places={places}
+        routeMode={routeMode}
+        onRouteResult={handleRouteResult}
+        onRouteLoading={handleRouteLoading}
+        routeData={routeData}
+      />
+      <RouteSidebar
+        routeMode={routeMode}
+        onToggleRouteMode={handleToggleRouteMode}
+        routeData={routeData}
+        routeLoading={routeLoading}
+        onClearRoute={handleClearRoute}
       />
     </div>
   );
